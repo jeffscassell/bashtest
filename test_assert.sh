@@ -1,4 +1,4 @@
-testFunctions(){
+test_functions(){
 
    _pass(){ true; }
    _fail(){ false; }
@@ -15,7 +15,7 @@ testFunctions(){
 }
 
 
-testEmptyVariables(){
+test_emptyVariables(){
    local empty
 
    assert -z "$empty"
@@ -23,7 +23,7 @@ testEmptyVariables(){
 }
 
 
-testStrings(){
+test_strings(){
    text=string
 
    assert -n "$text"
@@ -31,7 +31,7 @@ testStrings(){
 }
 
 
-testNumbers(){
+test_numbers(){
    number=5
    assert -n "$number"
    assert "$number" = 5
@@ -39,7 +39,7 @@ testNumbers(){
 
 
 # Just to see what failure looks like.
-testFailure(){
+test_failure(){
    assert false
    assert true  # Shouldn't get here.
 }

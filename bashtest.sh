@@ -3,61 +3,6 @@
 # 2026APR04
 
 # Bashtest
-#
-# A poor-man's clone of Python's Pytest library. Provides simple functionality
-# to confirm the outputs of expressions or commands meet expectations. Runs on
-# Bashtest-specific scripts with the same principles as Pytest.
-#
-# Bashtest scripts must be named beginning with "test" and ending in ".sh", and
-# must contain functions named beginning with "test". The functions can contain
-# as many assert statements as needed, but will stop executing after the first
-# failing assert. The rest of the functions will continue executing. After all
-# functions have run, all tests results will be printed, along with a basic
-# traceback for any failing tests.
-#
-# Assert statements can be used with expressions exactly as they would be with
-# bash's built-in test command (normally in single or double square brackets
-# like so: [ expression ]), so it's not necessary to learn anything new there.
-# Currently only single bracket evaluation is performed and has been tested.
-# Assert statements with commands can check for success or failure, but it's
-# normally more useful to use them in command expansion and apply them towards
-# expressions.
-#
-# Debug can be enabled for a lot more information, and `debug` statements can
-# be used in Bashtest script functions to the same effect (and debug must be
-# enabled for them to run).
-#
-# After all tests of all modules have completed, if all ran successfully then
-# the script returns a status code of 0, otherwise any failures will return a 1.
-#
-# [Examples]
-# bash bashtest.sh tests_directory
-# bashtest.sh .
-# bashtest.sh test_module_1.sh test_module_2.sh [...]
-#
-#
-# --- Sample Bashtest Script ---
-#
-# . "/some/path/test_module_1.sh"
-# . "/some/path/testModule2.sh"
-# 
-# testSomeFunction(){
-#    assert 1 = 1
-#    assert ! 1 = 0
-#    assert 1 -ne 0
-#
-#    assert true
-#    assert ! false
-#    assert ! moduleFunction arg_fails
-#    assert moduleFunction arg_passes
-#
-#    debug "moduleFunction returns: $(moduleFunction arg_fails)"
-#
-#    assert "$(moduleFunction arg)" = string
-#    ...
-# }
-#
-# test_otherFunction(){ ... }
 
 
 declare -a totalTests
@@ -97,23 +42,23 @@ assert() {
 
    __assert_simple_traceback__() {
       # Start at 2 to skip the calls to traceback() and assert().
+      local message="$1"
       local index=2
       local indent="   "
       local prefix line report
 
       report=($(caller $index))
       echo
-      echo "Assertion failed -> \"$1\""
+      echo "(${report[1]}) -> ${report[2]}"
       echo
-      echo "${indent}Function: ${report[1]}"
-      echo "${indent}Script:   ${report[2]}"
+      echo "${indent}Assertion: \"$message\""
    }
 
 
    # $1=message (optional)
    __assert_failure__() {
-      local message="${args[*]}"
-      [ -n "$1" ] && message="$1"
+      local message="${1:-"${args[*]}"}"
+      # [ -n "$1" ] && message="$1"
       __assert_simple_traceback__ "$message"
 
       [ "${0##*/}" = "bash" ] && return 1  # Running in the terminal.
@@ -220,19 +165,19 @@ $(arraysize filteredArray)"
       return
    fi
    
-   local result=("${filteredArray[@]}")  # Copy so original isn't mutated.
+   local results=("${filteredArray[@]}")  # Copy so original isn't mutated.
 
    for i in "${!removedArray[@]}"; do
-      for j in "${!result[@]}"; do
+      for j in "${!results[@]}"; do
 
-         if [ "${removedArray[$i]}" = "${result[$j]}" ]; then
-            unset -v result[$j]
+         if [ "${removedArray[$i]}" = "${results[$j]}" ]; then
+            unset -v results[$j]
             break
          fi
       done
    done
 
-   [ ${#result[@]} -gt 0 ] && printf "%s\n" "${result[@]}"
+   arrayfilled results && printf "%s\n" "${results[@]}"
 }
 
 
@@ -363,7 +308,7 @@ processTestFile() {
    debug "Received $(arraysize tests) test(s) from $file"
 
    # Skip if no tests are found.
-   if [ "${#tests[@]}" = 0 ]; then
+   if ! arrayfilled tests; then
       error "Contained no tests: $file"
       return 1
    fi
