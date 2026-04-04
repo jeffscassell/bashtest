@@ -101,8 +101,10 @@ assert() {
       local indent="   "
       local prefix line report
 
+      report=($(caller $index))
       echo
-      echo "Assertion failed: $1"
+      echo "Assertion failed -> \"$1\""
+      echo
       echo "${indent}Function: ${report[1]}"
       echo "${indent}Script:   ${report[2]}"
    }
@@ -184,8 +186,8 @@ debug() {
    fi
    
    if [ -n "$DEBUG" ]; then
-      echo
-      echo "$message"
+      echo >&2
+      echo "$message" >&2
    fi
 }
 
@@ -207,10 +209,13 @@ getFilteredArray() {
    local -n filteredArray="$2"
    local i j
    
+   debug "Filtering array of size $(arraysize removedArray) from array of size \
+$(arraysize filteredArray)"
+
    [ -n "$filteredArray" ] || return
 
    # Return the filter array if there is no remove array.
-   if [ ! ${#removedArray[@]} -gt 0 ]; then
+   if ! arrayfilled removedArray; then
       printf "%s\n" "${filteredArray[@]}"
       return
    fi
@@ -237,10 +242,12 @@ cleanupTests() {
    local -a tests=("${original[@]}")
    local oneTest
 
-   [ ${#tests[@]} -gt 0 ] || return
+   debug "Removing $(arraysize tests) test(s) from environment"
+
+   arrayfilled tests || return
 
    for oneTest in "${tests[@]}"; do
-      debug "Removing function $oneTest from environment"
+      debug "Removing function from environment: $oneTest"
       unset -f "$oneTest"
    done
 }
@@ -248,7 +255,7 @@ cleanupTests() {
 
 # $1=tests array; $2=test file
 #
-# Tracebacks aren't displayed if DEBUG is set in favor of more detailed
+# Tracebacks aren't displayed if DEBUG is set, in favor of more detailed
 # step-by-step feedback.
 runTests() {
    local -n testsOriginal="$1"
@@ -257,12 +264,15 @@ runTests() {
    local -a tracebacks
    local resultsLine oneTest feedback status
 
-   [ ${#tests[@]} -gt 0 ] || return
+   local failMessage="    ===== [ FAIL ] ====="
+   local   okMessage="    =====    OK    ====="
 
-   # File must be sourced again because tests are gathered within a subprocess.
+   arrayfilled tests || return
+
+   # File must be sourced again because tests were gathered within a subprocess.
+   debug "Sourcing $file to run tests"
    SAVED_ARGS=("$@")
    set --
-   debug "Sourcing $file to run tests"
    . "$file"
    set -- "${SAVED_ARGS[@]}"
 
@@ -287,18 +297,19 @@ runTests() {
       debug && echo && ($oneTest >&2)
 
       if [ $status = 0 ]; then
-         debug "=== Result: OK"
+         debug "$okMessage"
          resultsLine+="."
       else
          FAILURE=yes
-         debug "=== Result: [FAIL]"
+         debug "$failMessage"
          resultsLine+="F"
          tracebacks+=("$feedback")
       fi
    done
 
    totalTests+=("$file $resultsLine")
-   [ ${#tracebacks[@]} -gt 0 ] && ! debug && printf "%s\n" "${tracebacks[@]}"
+   # Only display tracebacks if there are elements and we're not debugging.
+   arrayfilled tracebacks && ! debug && printf "%s\n" "${tracebacks[@]}"
 }
 
 
@@ -325,16 +336,18 @@ current environment will be excluded"
    
    # Preserve current positional arguments, then remove them, otherwise sourcing
    # a file will pass those arguments along.
+   debug "Sourcing $file to gather tests"
    SAVED_ARGS=("$@")
    set --
-   debug "Sourcing $file to gather tests"
    . "$file"
    set -- "${SAVED_ARGS[@]}"
 
    readarray -t newTests < <(findTests)
-   debug "Gathered $(( $(arraysize newTests) - $(arraysize oldTests) )) tests"
+   debug "Gathered $(( $(arraysize newTests) - $(arraysize oldTests) )) test(s)"
+
    readarray -t filteredTests < <(getFilteredArray oldTests newTests)
    debug "Filtered and returning $(arraysize filteredTests) test(s)"
+
    arrayfilled filteredTests && printf "%s\n" "${filteredTests[@]}"
 }
 
@@ -344,8 +357,10 @@ processTestFile() {
    local file="$1"
    local -a tests
 
+   debug "Processing test file: $file"
+
    readarray -t tests < <(getTests "$file")
-   debug "Gathered $(arraysize tests) tests"
+   debug "Received $(arraysize tests) test(s) from $file"
 
    # Skip if no tests are found.
    if [ "${#tests[@]}" = 0 ]; then
@@ -375,12 +390,18 @@ main() {
    local -a testFiles
    local arg file
 
+   echo
+   echo "========== TESTS BEGIN =========="
+   echo
+
    for arg in "$@"; do
       
       if [ -d "$arg" ]; then
+         debug "Collecting test files from $arg"
          readarray -t testFiles < <(getTestFiles "$arg")
+         debug "Collected $(arraysize testFiles) test files"
 
-         if [ "${#testFiles[@]}" = 0 ]; then
+         if ! arrayfilled testFiles; then
             error "Contained no test files: $arg"
             continue
          fi
@@ -395,6 +416,9 @@ main() {
       fi
    done
 
+   echo
+   echo
+   echo "========== TESTS COMPLETE =========="
    echo
    printf "%s\n" "${totalTests[@]}"
 
