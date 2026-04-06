@@ -66,7 +66,9 @@ assert() {
 
 
    __assert_is_command__() {
-      ignoredCommands=("test" "shift")
+      local command
+      local -a ignoredCommands=("test" "shift")
+      
       for command in "${ignoredCommands[@]}"; do
          [ "$1" = "$command" ] && echo 1 && return
       done
@@ -84,7 +86,7 @@ assert() {
 
       report=($(caller $index))
       echo
-      echo "(${report[1]}) -> ${report[2]}"
+      echo "(${report[1]}) -> ${report[2]} @ ${report[0]}"
       echo
       echo "${indent}Assertion: \"$message\""
    }
