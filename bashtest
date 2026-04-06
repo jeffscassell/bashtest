@@ -117,11 +117,12 @@ assert() {
 
       debug "Running command:" "${args[@]}"
 
+      # Redirect all stdout to stderr, which is only displayed in debug mode.
       if [ "$firstArg" = '!' ]; then
-         output=$(! "${args[@]:1}")
+         output=$(! "${args[@]:1}" >&2)
          status=$?
       else
-         output=$("${args[@]}")
+         output=$("${args[@]}" >&2)
          status=$?
       fi
 
@@ -129,10 +130,10 @@ assert() {
       debug && [ -n "$output" ] && echo && echo "$output"
       
       if [ $status -eq 0 ]; then
-         debug "Command result: succeess"
+         debug "Command assertion result: succeess"
          return 0
       else
-         debug "Command result: failure"
+         debug "Command assertion result: failure"
          __assert_failure__
          return 1
       fi
@@ -281,10 +282,10 @@ runTests() {
 
    for oneTest in "${tests[@]}"; do
 
-      local startMessage="    >>> Starting ($oneTest) <<<"
-      local  failMessage="    ---   Failed ($oneTest) ---"
-      local    okMessage="    +++   Passed ($oneTest) +++"
-      
+      local startMessage="========== Starting ($oneTest) =========="
+      local  failMessage="---------- Failed ($oneTest) ----------"
+      local    okMessage="[[[[[[[[[[ Passed ($oneTest) ]]]]]]]]]]"
+   
       debug "$startMessage"
 
       if ! command -v "$oneTest" &> /dev/null; then
@@ -298,7 +299,11 @@ runTests() {
          continue
       fi
 
-      output=$($oneTest 2>&1)
+      if debug; then
+         output=$($oneTest)
+      else
+         output=$($oneTest 2> /dev/null)
+      fi
       status=$?
 
       # Show any output from tests.
@@ -415,7 +420,7 @@ main() {
       if [ -d "$arg" ]; then
          debug "Collecting Bashtest files from: $arg"
          readarray -t testFiles < <(getTestFiles "$arg")
-         debug "Collected $(arraysize testFiles) Bashtest files"
+         debug "Collected $(arraysize testFiles) Bashtest file(s)"
 
          if ! arrayfilled testFiles; then
             error "Contained no test files: $arg"
