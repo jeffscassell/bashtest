@@ -20,11 +20,11 @@ like so: `[ expression ]`), so it's not necessary to learn anything new there.
 Currently only **single** bracket evaluation is performed and has been tested.
 `assert` statements with commands can check for success or failure, but it's
 normally more useful to use them in command expansion and apply them towards
-expressions.
+expressions. The only caveat for handling commands is that it cannot handle
+pipes.
 
 Debug mode can be enabled for a lot more information by passing `-d` as the
-first argument, and `debug` statements can be used in `Bashtest` script
-functions to the same effect (and debug must be enabled for them to run).
+first argument.
 
 ## Example Usage
 

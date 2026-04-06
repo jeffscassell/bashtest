@@ -23,6 +23,42 @@ EOF
 }
 
 
+# $1=message
+error() {
+   local message="$1"
+
+   if [ -z "$message" ]; then
+      echo >&2
+      echo "<ERROR>: An unknown error occurred" >&2
+   fi
+
+   echo >&2
+   echo "<ERROR>: $message" >&2
+}
+
+
+# $1=message parts
+debug() {
+   local -a messageParts=("$@")
+   local part
+
+   # If no message is provided, return the status of DEBUG.
+   if [ -z "$messageParts" ]; then
+      [ -n "$DEBUG" ]
+      return
+   fi
+   
+   if [ -n "$DEBUG" ]; then
+      echo >&2
+      echo -n "[DEBUG]: ${messageParts[0]}" >&2
+      for part in "${messageParts[@]:1}"; do
+         echo -n " \"$part\"" >&2
+      done
+      echo >&2
+   fi
+}
+
+
 # $1=expression or command
 assert() {
    local args=("$@")
@@ -73,35 +109,43 @@ assert() {
    [ "$firstArg" = '!' ] && runCommand=$(__assert_is_command__ "$2")
 
    if [ $runCommand -eq 0 ]; then
-      local result
+      local output status
+
+      debug "Running command:" "${args[@]}"
 
       if [ "$firstArg" = '!' ]; then
-         result=$(! "${args[@]:1}")
-         result=$?
+         output=$(! "${args[@]:1}")
+         status=$?
       else
-         result=$("${args[@]}")
-         result=$?
+         output=$("${args[@]}")
+         status=$?
       fi
+
+      # Show any output from commands.
+      debug && [ -n "$output" ] && echo && echo "$output"
       
-      # echo result $result
-      [ $result -eq 0 ] || __assert_failure__
-      return
+      if [ $status -eq 0 ]; then
+         debug "Command result: succeess"
+         return 0
+      else
+         debug "Command result: failure"
+         __assert_failure__
+         return 1
+      fi
    fi
 
    # Handle expressions.
+   
+   debug "Evaluating expression:" "${args[@]}"
 
-   case "$firstArg" in
-      '!')
-         # Expression is supposed to fail, but doesn't.
-         [ "${args[@]}" ] || __assert_failure__
-         return
-         ;;
-      *)
-         # Expression is supposed to pass, but doesn't.
-         [ "${args[@]}" ] || __assert_failure__
-         return
-         ;;
-   esac
+   if [ "${args[@]}" ]; then
+      debug "Expression evaluated: true"
+      return 0
+   else
+      debug "Expression evaluated: false"
+      __assert_failure__
+      return 1
+   fi
 }
 
 
@@ -115,32 +159,8 @@ arraysize() {
 # $1=array
 arrayfilled() {
    local -n array="$1"
-   [ -n "$array" ] || return
+   [ -n "$1" ] || return
    [ ${#array[@]} -gt 0 ]
-}
-
-
-# $1=message
-debug() {
-   local message="$1"
-
-   # If no message is provided, return the status of DEBUG.
-   if [ -z "$message" ]; then
-      [ -n "$DEBUG" ]
-      return
-   fi
-   
-   if [ -n "$DEBUG" ]; then
-      echo >&2
-      echo "$message" >&2
-   fi
-}
-
-
-# $1=message
-error() {
-   local message="$1"
-   echo "Error processing: $message" >&2
 }
 
 
@@ -204,42 +224,44 @@ cleanupTests() {
 # step-by-step feedback.
 runTests() {
    local -n testsOriginal="$1"
-   local tests=("${testsOriginal[@]}")
+   local -a tests=("${testsOriginal[@]}")
    local file="$2"
    local -a tracebacks
-   local resultsLine oneTest feedback status
-
-   local failMessage="    ===== [ FAIL ] ====="
-   local   okMessage="    =====    OK    ====="
+   local resultsLine oneTest output status
 
    arrayfilled tests || return
 
    # File must be sourced again because tests were gathered within a subprocess.
-   debug "Sourcing $file to run tests"
+   debug "Sourcing file to run tests: $file"
    SAVED_ARGS=("$@")
    set --
    . "$file"
    set -- "${SAVED_ARGS[@]}"
 
    for oneTest in "${tests[@]}"; do
+
+      local startMessage="    >>> Starting ($oneTest) <<<"
+      local  failMessage="    ---   Failed ($oneTest) ---"
+      local    okMessage="    +++   Passed ($oneTest) +++"
       
-      debug ">>> Running: $oneTest"
+      debug "$startMessage"
 
       if ! command -v "$oneTest" &> /dev/null; then
          FAILURE=yes
-         feedback=$(echo)
-         feedback+="$test not found"
-         tracebacks+=("$feedback")
+         output=$(echo)
+         output+="$test not found"
+         tracebacks+=("$output")
          resultsLine+="F"
 
-         debug "$feedback"
+         debug "$output"
          continue
       fi
 
-      feedback=$($oneTest 2> /dev/null)
+      output=$($oneTest 2>&1)
       status=$?
 
-      debug && echo && ($oneTest >&2)
+      # Show any output from tests.
+      debug && [ -n "$output" ] && echo "$output"
 
       if [ $status = 0 ]; then
          debug "$okMessage"
@@ -248,11 +270,14 @@ runTests() {
          FAILURE=yes
          debug "$failMessage"
          resultsLine+="F"
-         tracebacks+=("$feedback")
+         tracebacks+=("$output")
       fi
    done
 
+   debug "Finished tests for file: $file"
+
    totalTests+=("$file $resultsLine")
+   
    # Only display tracebacks if there are elements and we're not debugging.
    arrayfilled tracebacks && ! debug && printf "%s\n" "${tracebacks[@]}"
 }
@@ -281,7 +306,7 @@ current environment will be excluded"
    
    # Preserve current positional arguments, then remove them, otherwise sourcing
    # a file will pass those arguments along.
-   debug "Sourcing $file to gather tests"
+   debug "Sourcing file to gather tests: $file"
    SAVED_ARGS=("$@")
    set --
    . "$file"
@@ -305,7 +330,7 @@ processTestFile() {
    debug "Processing test file: $file"
 
    readarray -t tests < <(getTests "$file")
-   debug "Received $(arraysize tests) test(s) from $file"
+   debug "Received $(arraysize tests) test(s) from file: $file"
 
    # Skip if no tests are found.
    if ! arrayfilled tests; then
