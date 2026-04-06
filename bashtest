@@ -63,11 +63,10 @@ debug() {
 assert() {
    local args=("$@")
    local firstArg="$1"
-   local numberOfArgs=$#
 
 
    __assert_is_command__() {
-      ignoredCommands=("test")
+      ignoredCommands=("test" "shift")
       for command in "${ignoredCommands[@]}"; do
          [ "$1" = "$command" ] && echo 1 && return
       done
@@ -101,6 +100,11 @@ assert() {
       exit 1
    }
 
+
+   if [ -z "$1" ]; then
+      __assert_failure__
+      return 1
+   fi
 
    # Handle command status codes.
 
@@ -138,6 +142,26 @@ assert() {
    
    debug "Evaluating expression:" "${args[@]}"
 
+   # "-n" Doesn't care if it's missing an argument, but I do.
+   while [ $# -gt 0 ]; do
+      case "$1" in
+         !)
+            shift 1
+            ;;
+         -n)
+            if [ -z "$2" ]; then
+               __assert_failure__
+               return 1
+            fi
+            ;;
+         *)
+            break
+            ;;
+      esac
+
+      break
+   done
+
    if [ "${args[@]}" ]; then
       debug "Expression evaluated: true"
       return 0
@@ -150,8 +174,25 @@ assert() {
 
 
 # $1=array
+printarray() {
+   if [ -z "$1" ]; then
+      echo No array passed
+      return 1
+   fi
+
+   local -n array="$1"
+
+   echo "Contents of array: $1"
+   for i in "${!array[@]}"; do
+      echo "$i: ${array[$i]}"
+   done
+}
+
+
+# $1=array
 arraysize() {
    local -n array="$1"
+   [ -z "$1" ] && echo -1 && return
    echo ${#array[@]}
 }
 
@@ -181,7 +222,7 @@ $(arraysize filteredArray)"
 
    # Return the filter array if there is no remove array.
    if ! arrayfilled removedArray; then
-      printf "%s\n" "${filteredArray[@]}"
+      arrayfilled filteredArray && printf "%s\n" "${filteredArray[@]}"
       return
    fi
    
@@ -294,8 +335,10 @@ getTests() {
    # Isolate any pre-existing functions that accidentally match the test
    # criteria.
    readarray -t oldTests < <(findTests)
+
    debug "$(arraysize oldTests) function(s) matching test naming convention in \
 current environment will be excluded"
+   debug && arrayfilled oldTests && debug "$(printarray oldTests)"
 
    if [ -z "$file" ]; then
       arrayfilled oldTests && printf "%s\n" "${oldTests[@]}"
@@ -313,10 +356,13 @@ current environment will be excluded"
    set -- "${SAVED_ARGS[@]}"
 
    readarray -t newTests < <(findTests)
+   debug && arrayfilled newTests && debug "$(printarray newTests)"
+   
    debug "Gathered $(( $(arraysize newTests) - $(arraysize oldTests) )) test(s)"
 
    readarray -t filteredTests < <(getFilteredArray oldTests newTests)
    debug "Filtered and returning $(arraysize filteredTests) test(s)"
+   debug && arrayfilled filteredTests && debug "$(printarray filteredTests)"
 
    arrayfilled filteredTests && printf "%s\n" "${filteredTests[@]}"
 }
@@ -327,7 +373,7 @@ processTestFile() {
    local file="$1"
    local -a tests
 
-   debug "Processing test file: $file"
+   debug "Processing Bashtest file: $file"
 
    readarray -t tests < <(getTests "$file")
    debug "Received $(arraysize tests) test(s) from file: $file"
@@ -367,9 +413,9 @@ main() {
    for arg in "$@"; do
       
       if [ -d "$arg" ]; then
-         debug "Collecting test files from $arg"
+         debug "Collecting Bashtest files from: $arg"
          readarray -t testFiles < <(getTestFiles "$arg")
-         debug "Collected $(arraysize testFiles) test files"
+         debug "Collected $(arraysize testFiles) Bashtest files"
 
          if ! arrayfilled testFiles; then
             error "Contained no test files: $arg"

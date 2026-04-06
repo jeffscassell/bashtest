@@ -9,7 +9,7 @@ must contain functions whose names begin with `test`. camelCase and snake_case
 are both perfectly fine for scripts and functions. The functions can contain
 as many `assert` statements as needed, but will stop executing after the first
 failing `assert`. The rest of the functions will continue executing. After all
-`test` functions have run for all `Bashtest` scripts, all tests results will be
+`test` functions have run for all `Bashtest` scripts, all test results will be
 printed, along with a very simple traceback (it's more a report than a trace,
 really) for any failing tests. If any tests for any `Bashtest` scripts failed,
 `Bashtest` will return a status code of 1, otherwise a 0 is returned.
@@ -29,13 +29,13 @@ first argument.
 ## Example Usage
 
 ```
-bash bashtest.sh tests_directory
+bash bashtest tests_directory
 
-bashtest.sh .
+bashtest .
 
-bashtest.sh test_module_1.sh test_module_2.sh [...]
+bashtest test_module_1.sh test_module_2.sh [...]
 
-bashtest.sh -d testModule1.sh testModule2.sh [...]
+bashtest -d testModule1.sh testModule2.sh [...]
 ```
 
 ## Sample Bashtest Script
@@ -57,9 +57,8 @@ testModuleFunction(){
    assert ! moduleFunction arg_fails
    assert moduleFunction arg_passes
 
-   debug "moduleFunction returns: $(moduleFunction arg_fails)"
-
    assert "$(moduleFunction arg)" = string
+   assert -z "$(moduleFunction)"
    
    ...
 }
