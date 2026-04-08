@@ -23,31 +23,49 @@ normally more useful to use them in command expansion and apply them towards
 expressions. The only caveat for handling commands is that it cannot handle
 pipes.
 
-Debug mode can be enabled for a lot more information by passing `-d` as the
-first argument.
+### Options
 
-## Example Usage
+All options should always be listed first.
+
+Debug mode can be enabled for a lot
+more information with the `-d` option.
+
+It is possible to specify specific tests to be run, which is helpful when
+trying to narrow down the reason for a specific failing test or two in debug
+mode. Otherwise debug mode puts out a lot, lot of information that becomes a
+pain to sift through. Pass the `-t` option with a list of tests to run,
+separated with commas like so: `test_function_1,test_function_2`.
+
+# Examples
+
+### At the terminal
 
 ```
-bash bashtest tests_directory
-
-bashtest .
-
+# Run with specific test files.
 bashtest test_module_1.sh test_module_2.sh [...]
 
+# Find and run tests files in a directory (and subdirectories).
+bashtest tests_directory
+
+# Run in debug mode.
 bashtest -d testModule1.sh testModule2.sh [...]
+
+# Run only specific tests (in all test files). Usually only makes sense when run
+# with a single file for this reason.
+bashtest -d -t test_function1,test_function2 testModule.sh
+
 ```
 
-## Sample Bashtest Script
+### Sample Bashtest script
 
 ```
 # test_some_module.sh
 
 
-. "/some/path/some_module.sh"
+. "/some/module/to_unit_test.sh"
 
 
-testModuleFunction(){
+test_moduleFunction(){
    assert 1 = 1
    assert ! 1 = 0
    assert 1 -ne 0
@@ -63,5 +81,8 @@ testModuleFunction(){
    ...
 }
 
-test_otherFunction(){ ... }
+
+test_otherFunction(){
+   ...
+}
 ```

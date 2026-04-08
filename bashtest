@@ -6,20 +6,22 @@
 
 
 declare -a totalTests
-declare DEBUG FAILURE
+declare DEBUG FAILURE RUN_TESTS
 
 
 printUsage() {
    cat << EOF
-Execute this script and point to a directory that contains test<name>.sh files,
-or a specific test<name>.sh file.
+Execute this script directories that contain test<name>.sh files,
+or specific test<name>.sh file(s).
 
 [Examples]
-bash bashtest.sh test_module.sh
-bashtest.sh testModule1.sh testModule2.sh
+bashtest.sh test_module.sh
 bashtest.sh /a/directory/with/tests
+bashtest.sh /a/directory/with/tests test_module_1.sh test_module_2.sh
+
+# Run only the given tests.
+bashtest.sh -t test_strings,test_functions testModule.sh
 EOF
-   exit 1
 }
 
 
@@ -192,6 +194,23 @@ printarray() {
 }
 
 
+# $1=value; $2=array
+isInArray() {
+   local value="$1"
+   local -n array="$2"
+
+   if [ -z "$value" ] || [ -z "$array" ]; then
+      return 1
+   fi
+
+   for element in "${array[@]}"; do
+      [ "$element" = "$value" ] && return 0
+   done
+
+   return 1
+}
+
+
 # $1=array
 arraysize() {
    local -n array="$1"
@@ -283,6 +302,14 @@ runTests() {
    set -- "${SAVED_ARGS[@]}"
 
    for oneTest in "${tests[@]}"; do
+
+      # Check if we're only supposed to run specific test(s).
+      if [ -n "$RUN_TESTS" ]; then
+         if ! isInArray "$oneTest" RUN_TESTS; then
+            debug "Skipping test: $oneTest"
+            continue
+         fi
+      fi
 
       local startMessage="========== Starting ($oneTest) =========="
       local  failMessage="---------- Failed ($oneTest) ----------"
@@ -407,8 +434,20 @@ getTestFiles() {
 }
 
 
+# $1=CSV tests to be run
+parseTestArgs() {
+   local tests="$1"
+   
+   local IFS=","
+   for test in "${tests[@]}"; do
+      RUN_TESTS+=($test)
+   done
+}
+
+
 main() {
-   [ -n "$1" ] || printUsage
+   local args=("$@")
+   [ -z "$args" ] && printUsage && exit 1
 
    local -a testFiles
    local arg file
@@ -417,9 +456,16 @@ main() {
    echo "========== TESTS BEGIN =========="
    echo
 
-   for arg in "$@"; do
-      
-      if [ -d "$arg" ]; then
+   for arg in "${args[@]}"; do
+
+      if [ ! -e "$arg" ]; then
+         log "Not a real file/directory: $arg" "" fail
+         continue
+      fi
+
+      if [ -f "$arg" ]; then
+         testFiles=("$arg")
+      elif [ -d "$arg" ]; then
          debug "Collecting Bashtest files from: $arg"
          readarray -t testFiles < <(getTestFiles "$arg")
          debug "Collected $(arraysize testFiles) Bashtest file(s)"
@@ -428,15 +474,12 @@ main() {
             error "Contained no test files: $arg"
             continue
          fi
-
-         for file in "${testFiles[@]}"; do
-            processTestFile "$file" || continue
-         done
-      elif [ -f "$arg" ]; then
-         processTestFile "$arg" || continue
-      else
-         echo "Invalid argument: $arg"
       fi
+
+      for file in "${testFiles[@]}"; do
+         processTestFile "$file"
+      done
+
    done
 
    echo
@@ -449,13 +492,40 @@ main() {
 }
 
 
-if [ "$#" -gt 0 ]; then
-   if [ "$1" = "-d" ]; then
-      DEBUG=true
-      shift 1
-   fi
+while [ $# -gt 0 ]; do
+   case "$1" in
+      -h|--help)
+         printUsage
+         exit 0
+         ;;
+      -d|--debug)
+         DEBUG=true
+         shift 1
+         ;;
+      -t|--test)
+         if [ -z "$2" ]; then
+            printUsage
+            exit 1
+         fi
 
-   main "$@"
-else
-   printUsage
-fi
+         parseTestArgs "$2"
+         shift 2
+         ;;
+      *)
+         main "$@"
+         exit
+         ;;
+   esac
+done
+
+
+# if [ "$#" -gt 0 ]; then
+#    if [ "$1" = "-d" ]; then
+#       DEBUG=true
+#       shift 1
+#    fi
+
+#    main "$@"
+# else
+#    printUsage
+# fi
