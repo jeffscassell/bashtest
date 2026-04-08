@@ -5,22 +5,51 @@
 # Bashtest
 
 
-declare -a totalTests
-declare DEBUG FAILURE RUN_TESTS
+declare -a TOTAL_TESTS
+declare DEBUG FAILURE RUN_TESTS STARTED
 
 
 printUsage() {
    cat << EOF
-Execute this script directories that contain test<name>.sh files,
-or specific test<name>.sh file(s).
+NAME
+   Bashtest
 
-[Examples]
-bashtest.sh test_module.sh
-bashtest.sh /a/directory/with/tests
-bashtest.sh /a/directory/with/tests test_module_1.sh test_module_2.sh
+SYNOPSIS
+   bashtest [OPTIONS...] FILES...
 
-# Run only the given tests.
-bashtest.sh -t test_strings,test_functions testModule.sh
+DESCRIPTION
+   A functional clone of the Python library Pytest, for Bash. Meant to be used
+   with Bashtest scripts to conduct unit testing of Bash scripts or functions.
+
+   Files and/or directories can be passed as arguments. Files will be treated as
+   Bashtest scripts directly, and directories will be recursively searched for
+   Bashtest scripts to run.
+
+   Bashtest scripts must begin with [test], and so must the functions within
+   the scripts. snake_case and camelCase are both fine, for both script names
+   and functions. Bashtest itself is very simple to use, the real work lies in
+   its scripts.
+
+OPTIONS
+   -d, --debug
+      Run in debug mode.
+   
+   -t, --test <test_function...>
+      Run only the specified tests, for all Bashtest scripts being processed.
+      Most useful to single out a failing test in combination with debug mode.
+      Multiple tests can be specified by separating them with commas, and NO
+      spaces. e.g., [test_one,test_two,test_three...]
+   
+   -h, --help
+      This help message.
+
+EXAMPLES
+   bashtest test_module.sh
+   bashtest /a/directory/with/tests
+   bashtest /a/directory/with/tests test_script_1.sh test_script_2.sh
+
+   # Run only the given tests in debug mode.
+   bashtest -d -t test_strings,test_functions testScript.sh
 EOF
 }
 
@@ -58,6 +87,17 @@ debug() {
       done
       echo >&2
    fi
+}
+
+
+# $1=file
+isTestFile() {
+   local file="$1"
+
+   [ -z "$file" ] && return 1
+
+   file="${file##*/}"
+   echo "$file" | grep -q -E "^test.*\.sh$"
 }
 
 
@@ -351,7 +391,7 @@ runTests() {
 
    debug "Finished tests for file: $file"
 
-   totalTests+=("$file $resultsLine")
+   TOTAL_TESTS+=("$file $resultsLine")
    
    # Only display tracebacks if there are elements and we're not debugging.
    arrayfilled tracebacks && ! debug && printf "%s\n" "${tracebacks[@]}"
@@ -362,6 +402,9 @@ findTests(){ declare -F | grep "declare -f test*" | awk '{print $3}'; }
 
 
 # $1=test file (optional)
+#
+# If no file is given, return functions in current environment that match test
+# criteria.
 getTests() {
    local file="$1"
    local -a oldTests newTests filteredTests
@@ -415,7 +458,14 @@ processTestFile() {
    # Skip if no tests are found.
    if ! arrayfilled tests; then
       error "Contained no tests: $file"
+      FAILURE=true
       return 1
+   fi
+
+   if [ -z "$STARTED" ]; then
+      echo
+      echo "========== TESTS BEGIN =========="
+      echo
    fi
 
    runTests tests "$file"
@@ -452,10 +502,6 @@ main() {
    local -a testFiles
    local arg file
 
-   echo
-   echo "========== TESTS BEGIN =========="
-   echo
-
    for arg in "${args[@]}"; do
 
       if [ ! -e "$arg" ]; then
@@ -477,16 +523,25 @@ main() {
       fi
 
       for file in "${testFiles[@]}"; do
+         if ! isTestFile "$file"; then
+            error "Not a valid test file: $file"
+            continue
+         fi
+
          processTestFile "$file"
       done
 
    done
 
-   echo
-   echo
-   echo "========== TESTS COMPLETE =========="
-   echo
-   printf "%s\n" "${totalTests[@]}"
+   if arrayfilled TOTAL_TESTS; then
+      echo
+      echo
+      echo "========== TESTS COMPLETE =========="
+      echo
+      printf "%s\n" "${TOTAL_TESTS[@]}"
+   else
+      echo "No tests were found to run."
+   fi
 
    [ -z "$FAILURE" ]
 }
@@ -517,15 +572,3 @@ while [ $# -gt 0 ]; do
          ;;
    esac
 done
-
-
-# if [ "$#" -gt 0 ]; then
-#    if [ "$1" = "-d" ]; then
-#       DEBUG=true
-#       shift 1
-#    fi
-
-#    main "$@"
-# else
-#    printUsage
-# fi
